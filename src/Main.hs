@@ -1,15 +1,18 @@
+{-# Language OverloadedStrings #-}
 module Main where
 
 import System.Random
 import Control.Concurrent
 import Control.Monad
 import Data.IORef
+import qualified Network.AMQP as MQ
+import qualified Data.ByteString.Lazy.Char8 as BL
 
 type TrafficDensity = Double
 -- Crossroad can either allow horizontal pass, vertical pass or neither. If it's neither,
 -- then we mark that state as changing (e.g. it's changing from vertical to horizontal pass)
-data CrossroadState = HPass | VPass | Changing deriving (Eq, Show)
-data Crossroad = Crossroad CrossroadState deriving (Eq, Show)
+data CrossroadState = HPass | VPass | Changing deriving (Eq, Show, Read)
+data Crossroad = Crossroad CrossroadState deriving (Eq, Show, Read)
 
 -- How long to pause between traffic light changesj
 changePause :: Double
@@ -56,6 +59,10 @@ main = do
   changingIO <- newIORef False -- is state of the crossroad changing
   changeToIO <- newIORef HPass -- if yes, to what does it have to change
   timeSinceLastChangeIO <- newIORef 0.0 -- when was last change initiated
+
+  -- Establish Connection with the RabbitMQ
+  conn <- MQ.openConnection "127.0.0.1" "/" "guest" "guest"
+  chan <- MQ.openChannel conn
   forever $ do
     c <- readIORef cIO -- get crossroad value
     timeSinceLastChange <- readIORef timeSinceLastChangeIO -- get value since last change
@@ -71,11 +78,11 @@ main = do
       modifyIORef changingIO (const False)
     -- if crossroad is not changing state generate random densities and check if state
     -- has to be changed
+    let currentState = getCrossroadState c
     unless changing $ do
       putStr "Not changing! "
       newD1 <- generateRandomDensity
       newD2 <- generateRandomDensity
-      let currentState = getCrossroadState c
       let newState = changeState timeSinceLastChange newD1 newD2 c
       putStrLn $ show timeSinceLastChange ++ " D1: " ++ show newD1 ++ " D2: " ++ show newD2 ++ " " ++ show currentState ++ " " ++ show newState
       -- if state has changed set that state of the crossroad is changing, save that value and
@@ -85,5 +92,8 @@ main = do
         modifyIORef changingIO (const True)
         modifyIORef changeToIO (const newState)
         modifyIORef timeSinceLastChangeIO (const 0.0)
+    -- send state information to SemaphoreExchange exchange on RabbitMQ
+    MQ.publishMsg chan "SemaphoreExchange" "exchangeKey"
+      MQ.newMsg { MQ.msgBody = BL.pack $ show currentState, MQ.msgDeliveryMode = Just MQ.Persistent}
     threadDelay 1000000 -- throttle everything so above happens every ~1 sec
 
