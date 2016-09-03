@@ -64,7 +64,6 @@ main = do
   conn <- MQ.openConnection "127.0.0.1" "/" "guest" "guest"
   chan <- MQ.openChannel conn
   forever $ do
-    c <- readIORef cIO -- get crossroad value
     timeSinceLastChange <- readIORef timeSinceLastChangeIO -- get value since last change
     modifyIORef timeSinceLastChangeIO (const (timeSinceLastChange + 1)) -- update time since last change
     changing <- readIORef changingIO -- get changing value
@@ -78,6 +77,7 @@ main = do
       modifyIORef changingIO (const False)
     -- if crossroad is not changing state generate random densities and check if state
     -- has to be changed
+    c <- readIORef cIO -- get crossroad value
     let currentState = getCrossroadState c
     unless changing $ do
       putStr "Not changing! "
@@ -93,7 +93,9 @@ main = do
         modifyIORef changeToIO (const newState)
         modifyIORef timeSinceLastChangeIO (const 0.0)
     -- send state information to SemaphoreExchange exchange on RabbitMQ
+    changingTmp <- readIORef changingIO
+    let ss = if changingTmp == True then Crossroad Changing else c
     MQ.publishMsg chan "SemaphoreExchange" "exchangeKey"
-      MQ.newMsg { MQ.msgBody = BL.pack $ show currentState, MQ.msgDeliveryMode = Just MQ.Persistent}
+      MQ.newMsg { MQ.msgBody = BL.pack $ show ss, MQ.msgDeliveryMode = Just MQ.Persistent}
     threadDelay 1000000 -- throttle everything so above happens every ~1 sec
 
