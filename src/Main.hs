@@ -37,14 +37,13 @@ main = do
   -- Establish Connection with the RabbitMQ
   conn <- MQ.openConnection "127.0.0.1" "/" "guest" "guest"
   chan <- MQ.openChannel conn
+  MQ.newMsg { MQ.msgBody = BL.pack $ show Crossroad HPass crossroadLocation, MQ.msgDeliveryMode = Just MQ.Persistent}
   forever $ do
     timeSinceLastChange <- readIORef timeSinceLastChangeIO -- get value since last change
     modifyIORef timeSinceLastChangeIO (const (timeSinceLastChange + 1)) -- update time since last change
     changing <- readIORef changingIO -- get changing value
     c <- readIORef cIO -- get crossroad value
     let ss = if changing then Crossroad Changing (location c) else c
-    MQ.publishMsg chan "SemaphoreExchange" "exchangeKey"
-      MQ.newMsg { MQ.msgBody = BL.pack $ show ss, MQ.msgDeliveryMode = Just MQ.Persistent}
     -- if crossroad is changing and time since last change is sufficient, then update crossroad
     -- to a new state, reset timer and set changing to False
     when (changing && timeSinceLastChange > changePause) $ do
@@ -53,6 +52,8 @@ main = do
       modifyIORef cIO (const $ c { state = changeTo })
       modifyIORef timeSinceLastChangeIO (const 0.0)
       modifyIORef changingIO (const False)
+      MQ.publishMsg chan "SemaphoreExchange" "exchangeKey"
+        MQ.newMsg { MQ.msgBody = BL.pack $ show (c { state = changeTo }) , MQ.msgDeliveryMode = Just MQ.Persistent}
     -- if crossroad is not changing state generate random densities and check if state
     -- has to be changed
     let currentState = state c
