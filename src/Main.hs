@@ -6,6 +6,7 @@ import System.Random
 import Control.Concurrent
 import Control.Monad
 import Data.IORef
+import System.Environment
 import qualified Network.AMQP as MQ
 import qualified Data.ByteString.Lazy.Char8 as BL
 
@@ -16,7 +17,7 @@ type Location = String
 data CrossroadState = HPass | VPass | Changing deriving (Eq, Show, Read)
 data Crossroad = Crossroad { state ::CrossroadState, location :: Location} deriving (Eq, Show, Read)
 
--- How long to pause between traffic light changesj
+-- How long to pause between traffic light changes
 changePause :: Double
 changePause = 3.0
 
@@ -33,10 +34,6 @@ negateCState VPass = HPass
 trafficDensityLimit :: TrafficDensity
 trafficDensityLimit = 1.5
 
--- default crossroad state
-initializeCrossroad :: Crossroad
-initializeCrossroad = Crossroad HPass ""
-
 -- simulates traffic sensor by generating random value
 generateRandomDensity :: IO TrafficDensity
 generateRandomDensity = getStdRandom (randomR (0, 2))
@@ -45,12 +42,13 @@ generateRandomDensity = getStdRandom (randomR (0, 2))
 changeState :: Double -> TrafficDensity -> TrafficDensity -> Crossroad -> CrossroadState
 changeState n nd1 nd2 (Crossroad {..})
   | n < minimumCrossroadState = state
-  | nd1 >= nd2 = negateCState state
+  | nd1 >= nd2 = negateCState state -- @todo fix this
   | otherwise = state
 
 main :: IO ()
 main = do
-  cIO <- newIORef initializeCrossroad -- keeps track of crossroad
+  crossroadLocation <- getEnv "CROSSROAD_LOCATION"
+  cIO <- newIORef (Crossroad HPass crossroadLocation) -- keeps track of crossroad
   changingIO <- newIORef False -- is state of the crossroad changing
   changeToIO <- newIORef HPass -- if yes, to what does it have to change
   timeSinceLastChangeIO <- newIORef 0.0 -- when was last change initiated
@@ -63,7 +61,7 @@ main = do
     modifyIORef timeSinceLastChangeIO (const (timeSinceLastChange + 1)) -- update time since last change
     changing <- readIORef changingIO -- get changing value
     c <- readIORef cIO -- get crossroad value
-    let ss = if changing == True then Crossroad Changing "" else c
+    let ss = if changing then Crossroad Changing (location c) else c
     MQ.publishMsg chan "SemaphoreExchange" "exchangeKey"
       MQ.newMsg { MQ.msgBody = BL.pack $ show ss, MQ.msgDeliveryMode = Just MQ.Persistent}
     -- if crossroad is changing and time since last change is sufficient, then update crossroad
