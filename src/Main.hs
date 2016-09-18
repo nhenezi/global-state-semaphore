@@ -10,25 +10,12 @@ import System.Environment
 import qualified Network.AMQP as MQ
 import qualified Data.ByteString.Lazy.Char8 as BL
 
-type TrafficDensity = Double
--- Crossroad can either allow horizontal pass, vertical pass or neither. If it's neither,
--- then we mark that state as changing (e.g. it's changing from vertical to horizontal pass)
-type Location = String
-data CrossroadState = HPass | VPass | Changing deriving (Eq, Show, Read)
-data Crossroad = Crossroad { state ::CrossroadState, location :: Location} deriving (Eq, Show, Read)
+import Lib
+
 
 -- How long to pause between traffic light changes
 changePause :: Double
 changePause = 3.0
-
--- how long does a crossroad have to be in a state before changing it
-minimumCrossroadState :: Double
-minimumCrossroadState = 5.0
-
-negateCState :: CrossroadState -> CrossroadState
-negateCState Changing = Changing
-negateCState HPass = VPass
-negateCState VPass = HPass
 
 -- value after which crossroad will consider changing state
 trafficDensityLimit :: TrafficDensity
@@ -38,12 +25,6 @@ trafficDensityLimit = 1.5
 generateRandomDensity :: IO TrafficDensity
 generateRandomDensity = getStdRandom (randomR (0, 2))
 
--- determines when a state of a crossroad has to be changed
-changeState :: Double -> TrafficDensity -> TrafficDensity -> Crossroad -> CrossroadState
-changeState n nd1 nd2 (Crossroad {..})
-  | n < minimumCrossroadState = state
-  | nd1 >= nd2 = negateCState state -- @todo fix this
-  | otherwise = state
 
 main :: IO ()
 main = do
