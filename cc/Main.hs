@@ -2,7 +2,7 @@
 module Main where
 
 import Control.Monad.IO.Class (liftIO)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (threadDelay, forkIO)
 import Control.Monad (forever)
 import qualified Network.AMQP as MQ
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -20,7 +20,10 @@ main = do
     mMsg <- liftIO $ MQ.getMsg chan MQ.Ack queue
     case mMsg of
       Nothing  -> liftIO $ threadDelay (10 * 100000) -- if there are no messages throttle ~100 msec
-      Just envelope -> saveStatus chan envelope
+      Just envelope -> do
+        saveStatus chan envelope
+        _ <- liftIO $ forkIO (MQ.ackEnv (snd envelope))
+        return ()
 
 saveStatus :: MQ.Channel -> (MQ.Message, MQ.Envelope) -> IO ()
 saveStatus _ (msg, _)= do
