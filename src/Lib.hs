@@ -19,18 +19,12 @@ data Crossroad = Crossroad { state ::CrossroadState, location :: Location} deriv
 minimumCrossroadState :: Double
 minimumCrossroadState = 5.0
 
--- Negates crossroad state
-negateCState :: CrossroadState -> CrossroadState
-negateCState Changing = Changing
-negateCState HPass = VPass
-negateCState VPass = HPass
-
 -- determines when a state of a crossroad has to be changed
 changeState :: Double -> TrafficDensity -> TrafficDensity -> Crossroad -> CrossroadState
 changeState n nd1 nd2 (Crossroad {..})
   | n < minimumCrossroadState = state
-  | nd1 >= nd2 = negateCState state -- @todo fix this
-  | otherwise = state
+  | nd1 >= nd2 = HPass
+  | otherwise = VPass
 
 -- Global state of the system
 data GlobalState = GlobalState [Crossroad] deriving (Eq, Show)

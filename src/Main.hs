@@ -5,6 +5,7 @@ module Main where
 import System.Random
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.IO.Class (liftIO)
 import Data.IORef
 import System.Environment
 import qualified Network.AMQP as MQ
@@ -37,7 +38,8 @@ main = do
   -- Establish Connection with the RabbitMQ
   conn <- MQ.openConnection "127.0.0.1" "/" "guest" "guest"
   chan <- MQ.openChannel conn
-  MQ.newMsg { MQ.msgBody = BL.pack $ show Crossroad HPass crossroadLocation, MQ.msgDeliveryMode = Just MQ.Persistent}
+  MQ.publishMsg chan "SemaphoreExchange" "exchangeKey"
+    MQ.newMsg { MQ.msgBody = BL.pack $ show (Crossroad HPass crossroadLocation), MQ.msgDeliveryMode = Just MQ.Persistent}
   forever $ do
     timeSinceLastChange <- readIORef timeSinceLastChangeIO -- get value since last change
     modifyIORef timeSinceLastChangeIO (const (timeSinceLastChange + 1)) -- update time since last change
